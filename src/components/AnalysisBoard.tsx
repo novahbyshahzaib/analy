@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { Chess } from 'chess.js';
+import { Chess, Move } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { StockfishEngine, EngineResponse } from '@/lib/chess/stockfish';
 import { categorizeMove, MoveCategory } from '@/lib/chess/analyzer';
@@ -13,20 +13,24 @@ type AnalyzedMove = {
 };
 
 export default function AnalysisBoard() {
-  const [fen, setFen] = useState(new Chess().fen());
-  const [evalBar, setEvalBar] = useState(50); // 0 to 100 percentage
+  const [game, setGame] = useState(new Chess());
+  const [fen, setFen] = useState(game.fen());
+  const [evalBar, setEvalBar] = useState(50);
   const [evalScore, setEvalScore] = useState<string>('0.0');
+  
+  const [history, setHistory] = useState<Move[]>([]);
+  const [currentMoveIndex, setCurrentMoveIndex] = useState(-1);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
   const [moves, setMoves] = useState<AnalyzedMove[]>([]);
   const [inputValue, setInputValue] = useState('');
   
   const engineRef = useRef<StockfishEngine | null>(null);
   const prevEvalRef = useRef<EngineResponse | null>(null);
-  const gameRef = useRef(new Chess());
 
   useEffect(() => {
     engineRef.current = new StockfishEngine();
-    // Initial evaluation
-    engineRef.current.evaluatePosition(gameRef.current.fen()).then(res => {
+    engineRef.current.evaluatePosition(game.fen()).then(res => {
       prevEvalRef.current = res;
       updateEvalBar(res);
     });
@@ -34,7 +38,7 @@ export default function AnalysisBoard() {
     return () => {
       engineRef.current?.quit();
     };
-  }, []); // Run only once on mount
+  }, []);
 
   const updateEvalBar = (res: EngineResponse) => {
     if (res.mate !== null) {
@@ -43,36 +47,43 @@ export default function AnalysisBoard() {
     } else if (res.evaluation !== null) {
       const score = res.evaluation / 100;
       setEvalScore((score > 0 ? '+' : '') + score.toFixed(1));
-      
       const percentage = 50 + (Math.max(-5, Math.min(5, score)) / 5) * 50;
       setEvalBar(percentage);
     }
   };
 
-  const onDrop = (sourceSquare: string, targetSquare: string) => {
-    const isWhiteTurn = gameRef.current.turn() === 'w';
+  const onDrop = ({ sourceSquare, targetSquare }: { sourceSquare: string, targetSquare: string | null }) => {
+    if (!targetSquare) return false;
+    const gameCopy = new Chess(fen);
     
     try {
-      const move = gameRef.current.move({
+      const move = gameCopy.move({
         from: sourceSquare,
         to: targetSquare,
         promotion: 'q',
       });
       
-      const newFen = gameRef.current.fen();
+      const newFen = gameCopy.fen();
       setFen(newFen);
+      setGame(gameCopy);
       
+      const newHistory = [...history.slice(0, currentMoveIndex + 1), move];
+      setHistory(newHistory);
+      setCurrentMoveIndex(newHistory.length - 1);
+      
+      const isWhiteTurn = !newFen.includes(' w ');
       if (engineRef.current && prevEvalRef.current) {
         engineRef.current.evaluatePosition(newFen).then(currEval => {
           updateEvalBar(currEval);
           const analysis = categorizeMove(prevEvalRef.current!, currEval, isWhiteTurn);
-          setMoves(prev => [...prev, { san: move.san, category: analysis.category, explanation: analysis.explanation }]);
+          setMoves(prev => [...prev.slice(0, currentMoveIndex + 1), { san: move.san, category: analysis.category, explanation: analysis.explanation }]);
           prevEvalRef.current = currEval;
         });
       }
       return true;
     } catch (e) {
-      return false; // Illegal move
+      console.error(e);
+      return false;
     }
   };
 
@@ -85,11 +96,14 @@ export default function AnalysisBoard() {
          newGame.load(inputValue);
       }
       
-      gameRef.current = newGame;
+      const gameHistory = newGame.history({ verbose: true }) as Move[];
+      setHistory(gameHistory);
+      setCurrentMoveIndex(gameHistory.length - 1);
+      
+      setGame(newGame);
       setFen(newGame.fen());
       setMoves([]);
       
-      // Re-evaluate
       if (engineRef.current) {
         engineRef.current.evaluatePosition(newGame.fen()).then(res => {
           prevEvalRef.current = res;
@@ -100,6 +114,62 @@ export default function AnalysisBoard() {
     } catch(e) {
       alert("Invalid FEN or PGN string");
     }
+  };
+  
+  const goToMove = (index: number) => {
+     if (index < -1 || index >= history.length) return;
+     
+     const newGame = new Chess();
+     for (let i = 0; i <= index; i++) {
+        newGame.move(history[i]);
+     }
+     
+     setCurrentMoveIndex(index);
+     setGame(newGame);
+     setFen(newGame.fen());
+     
+     if (engineRef.current) {
+        engineRef.current.evaluatePosition(newGame.fen(), 10).then(res => {
+          prevEvalRef.current = res;
+          updateEvalBar(res);
+        });
+     }
+  };
+
+  const analyzeAll = async () => {
+    if (!engineRef.current || history.length === 0) return;
+    setIsAnalyzing(true);
+    setMoves([]);
+    
+    const tempGame = new Chess();
+    let lastEval = await engineRef.current.evaluatePosition(tempGame.fen(), 12);
+    
+    const newAnalyzedMoves: AnalyzedMove[] = [];
+    
+    for (let i = 0; i < history.length; i++) {
+       const move = history[i];
+       const isWhiteTurn = tempGame.turn() === 'w';
+       tempGame.move(move);
+       
+       setFen(tempGame.fen());
+       setCurrentMoveIndex(i);
+       
+       const currEval = await engineRef.current.evaluatePosition(tempGame.fen(), 12);
+       updateEvalBar(currEval);
+       
+       const analysis = categorizeMove(lastEval, currEval, isWhiteTurn);
+       newAnalyzedMoves.push({
+           san: move.san,
+           category: analysis.category,
+           explanation: analysis.explanation
+       });
+       
+       setMoves([...newAnalyzedMoves]);
+       lastEval = currEval;
+    }
+    
+    prevEvalRef.current = lastEval;
+    setIsAnalyzing(false);
   };
 
   return (
@@ -113,7 +183,21 @@ export default function AnalysisBoard() {
           <div className={styles.evalScore}>{evalScore}</div>
         </div>
         <div className={styles.boardWrapper}>
-          <Chessboard position={fen} onPieceDrop={onDrop} boardWidth={500} />
+          <div style={{ width: '500px', maxWidth: '100%' }}>
+            <Chessboard options={{ position: fen, onPieceDrop: onDrop }} />
+          </div>
+          
+          <div className={styles.playbackControls}>
+             <button onClick={() => goToMove(currentMoveIndex - 1)} disabled={currentMoveIndex < 0 || isAnalyzing}>
+               &lt; Prev
+             </button>
+             <button onClick={() => goToMove(currentMoveIndex + 1)} disabled={currentMoveIndex >= history.length - 1 || isAnalyzing}>
+               Next &gt;
+             </button>
+             <button onClick={analyzeAll} disabled={isAnalyzing || history.length === 0} className={styles.analyzeBtn}>
+               {isAnalyzing ? 'Analyzing...' : 'Analyze Full PGN'}
+             </button>
+          </div>
         </div>
       </div>
       
@@ -131,7 +215,12 @@ export default function AnalysisBoard() {
         <h2>Game Analysis</h2>
         <div className={styles.movesList}>
           {moves.map((m, i) => (
-            <div key={i} className={`${styles.moveItem} ${styles[m.category.toLowerCase()]}`}>
+            <div 
+              key={i} 
+              className={`${styles.moveItem} ${styles[m.category.toLowerCase()]} ${i === currentMoveIndex ? styles.activeMove : ''}`}
+              onClick={() => goToMove(i)}
+              style={{ cursor: 'pointer' }}
+            >
               <strong>{i % 2 === 0 ? Math.floor(i/2) + 1 + '.' : ''} {m.san}</strong>
               <span className={styles.categoryBadge}>{m.category}</span>
               <p>{m.explanation}</p>

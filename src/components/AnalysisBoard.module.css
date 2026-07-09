@@ -128,3 +128,34 @@
 .loadBtn:hover {
   background: #005bb5;
 }
+
+.playbackControls {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  justify-content: center;
+}
+
+.playbackControls button {
+  padding: 0.5rem 1rem;
+  border: none;
+  background: #333;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.playbackControls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.playbackControls button.analyzeBtn {
+  background: #26c281;
+  font-weight: bold;
+}
+
+.activeMove {
+  border-left: 4px solid #0070f3;
+  background: #3a3a3a;
+}
