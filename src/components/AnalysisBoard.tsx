@@ -13,19 +13,20 @@ type AnalyzedMove = {
 };
 
 export default function AnalysisBoard() {
-  const [game, setGame] = useState(new Chess());
-  const [fen, setFen] = useState(game.fen());
+  const [fen, setFen] = useState(new Chess().fen());
   const [evalBar, setEvalBar] = useState(50); // 0 to 100 percentage
   const [evalScore, setEvalScore] = useState<string>('0.0');
   const [moves, setMoves] = useState<AnalyzedMove[]>([]);
+  const [inputValue, setInputValue] = useState('');
   
   const engineRef = useRef<StockfishEngine | null>(null);
   const prevEvalRef = useRef<EngineResponse | null>(null);
+  const gameRef = useRef(new Chess());
 
   useEffect(() => {
     engineRef.current = new StockfishEngine();
     // Initial evaluation
-    engineRef.current.evaluatePosition(game.fen()).then(res => {
+    engineRef.current.evaluatePosition(gameRef.current.fen()).then(res => {
       prevEvalRef.current = res;
       updateEvalBar(res);
     });
@@ -33,7 +34,7 @@ export default function AnalysisBoard() {
     return () => {
       engineRef.current?.quit();
     };
-  }, [game]);
+  }, []); // Run only once on mount
 
   const updateEvalBar = (res: EngineResponse) => {
     if (res.mate !== null) {
@@ -43,40 +44,61 @@ export default function AnalysisBoard() {
       const score = res.evaluation / 100;
       setEvalScore((score > 0 ? '+' : '') + score.toFixed(1));
       
-      // Calculate percentage for bar. A score of +5 (or -5) is 100% (or 0%)
       const percentage = 50 + (Math.max(-5, Math.min(5, score)) / 5) * 50;
       setEvalBar(percentage);
     }
   };
 
   const onDrop = (sourceSquare: string, targetSquare: string) => {
-    const gameCopy = new Chess(game.fen());
-    const isWhiteTurn = gameCopy.turn() === 'w';
+    const isWhiteTurn = gameRef.current.turn() === 'w';
     
     try {
-      const move = gameCopy.move({
+      const move = gameRef.current.move({
         from: sourceSquare,
         to: targetSquare,
         promotion: 'q',
       });
       
-      setGame(gameCopy);
-      setFen(gameCopy.fen());
+      const newFen = gameRef.current.fen();
+      setFen(newFen);
       
-      // Evaluate new position
       if (engineRef.current && prevEvalRef.current) {
-        engineRef.current.evaluatePosition(gameCopy.fen()).then(currEval => {
+        engineRef.current.evaluatePosition(newFen).then(currEval => {
           updateEvalBar(currEval);
-          
           const analysis = categorizeMove(prevEvalRef.current!, currEval, isWhiteTurn);
           setMoves(prev => [...prev, { san: move.san, category: analysis.category, explanation: analysis.explanation }]);
-          
           prevEvalRef.current = currEval;
         });
       }
       return true;
     } catch (e) {
       return false; // Illegal move
+    }
+  };
+
+  const handleLoad = () => {
+    try {
+      const newGame = new Chess();
+      if (inputValue.includes('[')) {
+         newGame.loadPgn(inputValue);
+      } else {
+         newGame.load(inputValue);
+      }
+      
+      gameRef.current = newGame;
+      setFen(newGame.fen());
+      setMoves([]);
+      
+      // Re-evaluate
+      if (engineRef.current) {
+        engineRef.current.evaluatePosition(newGame.fen()).then(res => {
+          prevEvalRef.current = res;
+          updateEvalBar(res);
+        });
+      }
+      setInputValue('');
+    } catch(e) {
+      alert("Invalid FEN or PGN string");
     }
   };
 
@@ -96,6 +118,16 @@ export default function AnalysisBoard() {
       </div>
       
       <div className={styles.sidebar}>
+        <div className={styles.inputControls}>
+           <input 
+             type="text" 
+             placeholder="Paste FEN or PGN here..." 
+             value={inputValue}
+             onChange={(e) => setInputValue(e.target.value)}
+             className={styles.inputField}
+           />
+           <button onClick={handleLoad} className={styles.loadBtn}>Load</button>
+        </div>
         <h2>Game Analysis</h2>
         <div className={styles.movesList}>
           {moves.map((m, i) => (
