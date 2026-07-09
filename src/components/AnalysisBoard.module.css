@@ -1,0 +1,101 @@
+.container {
+  display: flex;
+  gap: 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: system-ui, sans-serif;
+  color: #fff;
+}
+
+.boardSection {
+  display: flex;
+  gap: 1rem;
+}
+
+.evalBarContainer {
+  width: 30px;
+  height: 500px;
+  background-color: #333;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.evalBarFill {
+  width: 100%;
+  transition: height 0.5s ease;
+}
+
+.evalScore {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-weight: bold;
+  font-size: 0.8rem;
+  color: #aaa;
+  z-index: 10;
+  text-shadow: 0 0 2px rgba(0,0,0,0.8);
+}
+
+.boardWrapper {
+  width: 500px;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.sidebar {
+  flex: 1;
+  background: #1e1e1e;
+  border-radius: 8px;
+  padding: 1.5rem;
+  height: 500px;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.sidebar h2 {
+  margin-top: 0;
+  border-bottom: 1px solid #333;
+  padding-bottom: 1rem;
+}
+
+.movesList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.moveItem {
+  padding: 0.75rem;
+  border-radius: 4px;
+  background: #2a2a2a;
+}
+
+.categoryBadge {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.brilliant .categoryBadge { background: #26c281; color: #fff; }
+.great .categoryBadge { background: #5c97bf; color: #fff; }
+.best .categoryBadge { background: #87d37c; color: #000; }
+.excellent .categoryBadge { background: #a2ded0; color: #000; }
+.good .categoryBadge { background: #c8f7c5; color: #000; }
+.inaccuracy .categoryBadge { background: #f3c200; color: #000; }
+.mistake .categoryBadge { background: #e67e22; color: #fff; }
+.blunder .categoryBadge { background: #d91e18; color: #fff; }
+
+.moveItem p {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.85rem;
+  color: #ccc;
+}
